@@ -1,5 +1,6 @@
 require('loveps3')
 require('tween')
+require('AnAL')
 
 -- ********* STATE *********
 
@@ -45,25 +46,31 @@ local playerTile = nil
 -- ********* LOVE FUNCTIONS *********
 
 function love.load()
+    bg = love.graphics.newImage("assets/bg.png")
+    worker = love.graphics.newImage("assets/worker.png")
+    workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
+
     controller = getController(1, buttonListener, stickListener)
     if controller == nil then
         state = NO_CONTROLLER
         return
     end
     state = PLAY
-    renderGrid = newGrid(LEVELS[currentLevel].grid, 32)
+    renderGrid = newGrid(LEVELS[currentLevel])
 end
 
 function love.update(dt)    
     if state == PLAY then
         controller:update(false)
         updateWorkers()
+        workerAnim:update(dt)
     end
 end
 
 function love.draw()
+    love.graphics.draw(bg, 0, 0)
     if state == PLAY then
-        renderGrid:draw(LEVELS[currentLevel].x, LEVELS[currentLevel].y)
+        renderGrid:draw()
     elseif state == NO_CONTROLLER then
         love.graphics.print("NO CONTROLLER FOUND!", 100, 100)
     end
@@ -170,10 +177,12 @@ end
 local grid = {}
 grid.__index = grid
 
-function newGrid(level, tileSize)
-    local g = {} 
-    g.tileSize = tileSize
-    g.data = loadGrid(level)
+function newGrid(level)
+    local g = {}
+    g.x = level.x
+    g.y = level.y
+    g.tileSize = level.tileSize
+    g.data = loadGrid(level.grid)
     return setmetatable(g, grid)
 end
 
@@ -192,11 +201,11 @@ function loadGrid(level)
     return parsedGrid
 end
 
-function grid:draw(x, y)
+function grid:draw()
     for i=1, table.getn(self.data) do
         for j=1, table.getn(self.data[i]) do
-            tileX = x + (TILE_SIZE * (i - 1))
-            tileY = y + (TILE_SIZE * (j - 1))
+            tileX = self.x + (64 * (i - 1))
+            tileY = self.y + (64 * (j - 1))
             self.data[i][j].draw(tileX, tileY, self.data[i][j])
         end
     end
@@ -226,8 +235,9 @@ function newGridItem(localX, localY, type, state)
 end
 
 function drawWorker(x, y, item)
-    love.graphics.setColor(0, 255, 0)
-    love.graphics.rectangle('fill', x, y, TILE_SIZE - 5, TILE_SIZE - 5)
+    love.graphics.setColor(255, 255, 255)
+    workerAnim:draw(x, y)
+    --love.graphics.rectangle('fill', x, y, 60, 60)
 
     if item.state == CONVERTING then
         love.graphics.setColor(0, 0, 0)
@@ -237,7 +247,7 @@ end
 
 function drawPlayer(x, y, item)
     love.graphics.setColor(255, 0, 0)
-    love.graphics.rectangle('fill', x, y, TILE_SIZE - 5, TILE_SIZE - 5)
+    love.graphics.rectangle('fill', x, y, 60, 60)
     love.graphics.setColor(0, 0, 0)
     if item.state == TALKING then
         love.graphics.print('T', x + 5, y + 10)
@@ -249,17 +259,15 @@ end
 
 function drawSupervisor(x, y, item)
     love.graphics.setColor(0, 0, 255)
-    love.graphics.rectangle('fill', x, y, TILE_SIZE - 5, TILE_SIZE - 5)
+    love.graphics.rectangle('fill', x, y, 60, 60)
 end
 
 function drawSpace(x, y, item)
     love.graphics.setColor(255, 255, 255)
-    love.graphics.rectangle('fill', x, y, TILE_SIZE - 5, TILE_SIZE - 5)
+    love.graphics.rectangle('fill', x, y, 60, 60)
 end
 
 -- ********* LEVEL LAYOUTS *********
-
-TILE_SIZE = 64
 
 -- 0: Empty space
 -- 1: Normal Worker
@@ -267,7 +275,7 @@ TILE_SIZE = 64
 -- 3: Supervisor starting point
 LEVELS = {
     {
-        x = 200, y = 100,
+        tileSize = 64, x = 200, y = 100,
         grid={
             {SUPERVISOR, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
