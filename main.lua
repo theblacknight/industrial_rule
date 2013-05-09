@@ -1,6 +1,7 @@
 require('loveps3')
-require('tween')
 require('AnAL')
+
+local tween = require('tween')
 
 -- ********* STATE *********
 
@@ -64,6 +65,7 @@ function love.update(dt)
         controller:update(false)
         updateWorkers()
         workerAnim:update(dt)
+        tween.update(dt)
     end
 end
 
@@ -130,9 +132,12 @@ function updateWorkers()
         for j=1, table.getn(renderGrid.data[i]) do
             item = renderGrid.data[i][j]
             if item.type == WORKER then
-                if item.state == NONE and talking(item) then
-                    item.state = CONVERTING
-                    break
+                if talking(item) then
+                    if item.state == NONE then
+                        item.state = CONVERTING
+                        startConversionBar(item)
+                        return
+                    end
                 else
                     if item.state == CONVERTING then
                         item.state = NONE
@@ -140,12 +145,18 @@ function updateWorkers()
                             tween.stop(item.tween)
                             item.tween = nil
                             item.state = NONE
+                            item.conversionBar = nil
                         end
                     end
                 end
             end
         end
     end
+end
+
+function startConversionBar(item)
+    item.conversionBar = {x = item.x + 2, y = item.y + 2, width = 0, height = 10}
+    item.tween = tween.start(1, item.conversionBar, { width = 60 }, 'linear')
 end
 
 function talking(worker)
@@ -182,16 +193,20 @@ function newGrid(level)
     g.x = level.x
     g.y = level.y
     g.tileSize = level.tileSize
-    g.data = loadGrid(level.grid)
+    g.data = loadGrid(level.grid, level.x, level.y)
     return setmetatable(g, grid)
 end
 
-function loadGrid(level)
+function loadGrid(level, x, y)
     parsedGrid = {}
     for i=1, table.getn(level) do
         parsedGrid[i] = {}
         for j=1, table.getn(level[i]) do
             item = newGridItem(i, j, level[i][j])
+            tileX = x + (64 * (i - 1))
+            tileY = y + (64 * (j - 1))
+            item.x = tileX
+            item.y = tileY
             if item.type == PLAYER then
                 playerTile = item
             end
@@ -204,9 +219,8 @@ end
 function grid:draw()
     for i=1, table.getn(self.data) do
         for j=1, table.getn(self.data[i]) do
-            tileX = self.x + (64 * (i - 1))
-            tileY = self.y + (64 * (j - 1))
-            self.data[i][j].draw(tileX, tileY, self.data[i][j])
+            it = self.data[i][j]
+            it.draw(it.x, it.y, it)
         end
     end
 end
@@ -240,8 +254,10 @@ function drawWorker(x, y, item)
     --love.graphics.rectangle('fill', x, y, 60, 60)
 
     if item.state == CONVERTING then
-        love.graphics.setColor(0, 0, 0)
-        love.graphics.print('C', x + 5, y + 10)
+        love.graphics.setColor(255, 0, 0)
+        love.graphics.rectangle('fill', item.x, item.y,
+                                item.conversionBar.width,
+                                item.conversionBar.height)
     end
 end
 
