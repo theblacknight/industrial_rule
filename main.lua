@@ -1,5 +1,6 @@
 require('loveps3')
 require('AnAL')
+require "pulse"
 
 local tween = require('tween')
 
@@ -46,6 +47,7 @@ local playerTile = nil
 -- ********* LOVE FUNCTIONS *********
 
 function love.load()
+    love.graphics.setCaption( 'Industrial Rule' )
     bg = love.graphics.newImage("assets/bg.png")
     worker = love.graphics.newImage("assets/worker.png")
     workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
@@ -55,12 +57,16 @@ function love.load()
         state = NO_CONTROLLER
         return
     end
+    gt = 0
     state = PLAY
     renderGrid = newGrid(LEVELS[currentLevel])
 end
 
 function love.update(dt)    
     if state == PLAY then
+        gt = gt + dt
+        fx.pulseRed:send( "time", gt )
+        fx.pulseGreen:send( "time", gt )
         controller:update()
         updateWorkers()
         workerAnim:update(dt)
@@ -264,7 +270,7 @@ end
 
 function drawWorker(x, y, item)
     love.graphics.setColor(255, 255, 255)
-    workerAnim:draw(x, y)
+
     if item.state == CONVERTING then
         love.graphics.setColor(255, 0, 0)
         love.graphics.rectangle('fill', x, y,
@@ -274,9 +280,14 @@ function drawWorker(x, y, item)
         love.graphics.setColor(255, 255, 255)
         love.graphics.print('MOV', x, y)
     elseif item.state == CONVERTED then
+        love.graphics.setPixelEffect(fx.pulseGreen)
         love.graphics.setColor(255, 255, 255)
         love.graphics.print('CTD', x, y)
+    else
+        love.graphics.setPixelEffect(fx.pulseRed)
     end
+    workerAnim:draw(x, y)
+    love.graphics.setPixelEffect()
 end
 
 function drawPlayer(x, y, item)
