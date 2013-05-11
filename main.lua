@@ -20,7 +20,7 @@ local SUPERVISOR = 3
 
 -- Player states
 local NONE = 0
-local MOVING = 1
+local MOVING = 10
 local TALKING = 2
 
 -- Player directions
@@ -35,7 +35,6 @@ local CONVERTED = 2
 
 -- Current states
 local playerTarget = NONE
-local workerState = UNCONVERTED
 
 -- Game state
 local currentLevel = 1
@@ -62,7 +61,7 @@ end
 
 function love.update(dt)    
     if state == PLAY then
-        controller:update(false)
+        controller:update()
         updateWorkers()
         workerAnim:update(dt)
         tween.update(dt)
@@ -85,44 +84,46 @@ function buttonListener(button)
 end
 
 function stickListener(stick, vector)
+    currentDirection = getDirection(vector)
     if stick == 'LEFT' then
-        if pointingLeft(vector) then
-            talkLeft()
-        elseif pointingRight(vector) then
-            talkRight()
-        elseif pointingUp(vector) then
-            talkUp()
-        elseif pointingDown(vector) then
-            talkDown()
-        else
-            resetPlayer()
+        if playerTile.state ~= MOVING then
+            if currentDirection == 'left' then
+                setPlayerState(TALKING, LEFT) 
+            elseif currentDirection == 'right' then
+                setPlayerState(TALKING, RIGHT) 
+            elseif currentDirection == 'up' then
+                setPlayerState(TALKING, UP) 
+            elseif currentDirection == 'down' then
+                setPlayerState(TALKING, DOWN)
+            else
+                setPlayerState(NONE, NONE) 
+            end
+        end
+    else
+        if currentDirection ~= nil then
+            trySwap(currentDirection)
         end
     end
 end
 
-function resetPlayer()
-    playerTile.state = NONE
-    playerTarget = NONE
+function setPlayerState(state, direction)
+    playerTile.state = state
+    playerTarget = direction
 end
 
-function talkLeft()
-    playerTile.state = TALKING
-    playerTarget = LEFT
-end
-
-function talkRight()
-    playerTile.state = TALKING
-    playerTarget = RIGHT
-end
-
-function talkUp()
-    playerTile.state = TALKING
-    playerTarget = UP
-end
-
-function talkDown()
-    playerTile.state = TALKING
-    playerTarget = DOWN
+function trySwap(direction)
+    if direction == 'left' then
+        tile = getPlayerRelativeTile(-1, 0)
+    elseif direction == 'right' then
+        tile = getPlayerRelativeTile(1, 0)
+    elseif direction == 'up' then
+        tile = getPlayerRelativeTile(0, -1)
+    elseif direction == 'down' then
+        tile = getPlayerRelativeTile(0, 1)
+    end
+    if tile ~= nil and tile.type == WORKER and tile.state == CONVERTED then
+        swapPositions(tile)
+    end
 end
 
 -- GAME LOGIC
@@ -155,8 +156,14 @@ function updateWorkers()
 end
 
 function startConversionBar(item)
-    item.conversionBar = {x = item.x + 2, y = item.y + 2, width = 0, height = 10}
-    item.tween = tween.start(1, item.conversionBar, { width = 60 }, 'linear')
+    item.conversionBar = {width = 0, height = 10}
+    item.tween = tween.start(1, item.conversionBar, { width = 60 },
+                                'linear', conversionFinished, item)
+end
+
+function conversionFinished(worker)
+    worker.state = CONVERTED
+    worker.tween = nil
 end
 
 function talking(worker)
@@ -179,7 +186,7 @@ function isTarget(direction, worker)
 end
 
 function getPlayerRelativeTile(xOffset, yOffset)
-    return renderGrid.data[playerTile.localX + xOffset][playerTile.localY + yOffset]
+    return renderGrid.data[playerTile.pos.x + xOffset][playerTile.pos.y + yOffset]
 end
 
 -- ********* GRID ********* 
@@ -194,6 +201,8 @@ function newGrid(level)
     g.y = level.y
     g.tileSize = level.tileSize
     g.data = loadGrid(level.grid, level.x, level.y)
+    g.width = #g.data
+    g.height = #g.data[1]
     return setmetatable(g, grid)
 end
 
@@ -202,11 +211,8 @@ function loadGrid(level, x, y)
     for i=1, table.getn(level) do
         parsedGrid[i] = {}
         for j=1, table.getn(level[i]) do
-            item = newGridItem(i, j, level[i][j])
-            tileX = x + (64 * (i - 1))
-            tileY = y + (64 * (j - 1))
-            item.x = tileX
-            item.y = tileY
+            item = newGridItem(level[i][j])
+            item.pos = {x = i, y = j}
             if item.type == PLAYER then
                 playerTile = item
             end
@@ -219,10 +225,20 @@ end
 function grid:draw()
     for i=1, table.getn(self.data) do
         for j=1, table.getn(self.data[i]) do
+            tileX = self.x + (self.tileSize * (i - 1))
+            tileY = self.y + (self.tileSize * (j - 1))
             it = self.data[i][j]
-            it.draw(it.x, it.y, it)
+            it.draw(tileX, tileY, it)
         end
     end
+end
+
+function grid:swap(item1, item2)
+    self.data[item1.pos.x][item1.pos.y] = item2
+    self.data[item2.pos.x][item2.pos.y] = item1
+    tmpPos = item1.pos
+    item1.pos = item2.pos
+    item2.pos = tmpPos
 end
 
 -- Grid items
@@ -230,10 +246,8 @@ end
 local gridItem = {}
 gridItem.__index = gridItem
 
-function newGridItem(localX, localY, type, state)
+function newGridItem(type)
     local gi = {}
-    gi.localX = localX
-    gi.localY = localY
     gi.type = type
     gi.state = NONE
     if gi.type == WORKER then
@@ -251,13 +265,17 @@ end
 function drawWorker(x, y, item)
     love.graphics.setColor(255, 255, 255)
     workerAnim:draw(x, y)
-    --love.graphics.rectangle('fill', x, y, 60, 60)
-
     if item.state == CONVERTING then
         love.graphics.setColor(255, 0, 0)
-        love.graphics.rectangle('fill', item.x, item.y,
+        love.graphics.rectangle('fill', x, y,
                                 item.conversionBar.width,
                                 item.conversionBar.height)
+    elseif item.state == MOVING then
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print('MOV', x, y)
+    elseif item.state == CONVERTED then
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print('CTD', x, y)
     end
 end
 
@@ -267,6 +285,8 @@ function drawPlayer(x, y, item)
     love.graphics.setColor(0, 0, 0)
     if item.state == TALKING then
         love.graphics.print('T', x + 5, y + 10)
+    elseif item.state == MOVING then
+        love.graphics.print('MOV', x + 5, y + 10)
     else
         love.graphics.print('P1', x + 5, y + 10)
     end
@@ -283,12 +303,21 @@ function drawSpace(x, y, item)
     love.graphics.rectangle('fill', x, y, 60, 60)
 end
 
+function swapPositions(worker)
+    playerTile.state = MOVING
+    worker.state = MOVING
+    timer = {t = 0}
+    tween.start(1, timer, { t = 100 }, 'linear', swapFinished, worker)
+end
+
+function swapFinished(worker)
+    renderGrid:swap(playerTile, worker)
+    playerTile.state = NONE
+    worker.state = CONVERTED
+end
+
 -- ********* LEVEL LAYOUTS *********
 
--- 0: Empty space
--- 1: Normal Worker
--- 2: Player starting point
--- 3: Supervisor starting point
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,

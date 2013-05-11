@@ -93,6 +93,19 @@ function  pointingDown(vector)
    return vector.y > 0 and pointing(vector, downVector) 
 end
 
+function getDirection(vector)
+    if vector.x < 0 and pointing(vector, leftVector) then
+        return 'left'
+    elseif vector.x > 0 and pointing(vector, rightVector) then
+        return 'right'
+    elseif vector.y < 0 and pointing(vector, upVector) then
+        return 'up'
+    elseif vector.y > 0 and pointing(vector, downVector) then
+        return 'down'
+    end
+    return nil
+end
+
 function  pointing(vector, baseVector)
     if magnitude(vector) >= 1 then
         if angleBetween(baseVector, vector) <= 1 then
