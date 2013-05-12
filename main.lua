@@ -106,7 +106,7 @@ function stickListener(stick, vector)
             end
         end
     else
-        if currentDirection ~= nil then
+        if playerTile.state == NONE and currentDirection ~= nil then
             trySwap(currentDirection)
         end
     end
@@ -282,7 +282,6 @@ function drawWorker(x, y, item)
     elseif item.state == CONVERTED then
         love.graphics.setPixelEffect(fx.pulseGreen)
         love.graphics.setColor(255, 255, 255)
-        love.graphics.print('CTD', x, y)
     else
         love.graphics.setPixelEffect(fx.pulseRed)
     end
@@ -332,8 +331,9 @@ end
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,
+        supervisors = {{tileX = 0, tileY = 0}},
         grid={
-            {SUPERVISOR, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
             {EMPTY, WORKER, PLAYER, WORKER, WORKER, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
