@@ -61,12 +61,8 @@ function controller:update(restrict)
     if self.stickListener ~= nil then
         leftStickVector = getStickVector(self)
         rightStickVector = getStickVector(self, 2)
-        if restrict == false or magnitude(leftStickVector) > 0.2 then
-            stickListener('LEFT', leftStickVector)
-        end
-        if restrict == false or magnitude(rightStickVector) > 0.2 then
-            stickListener('RIGHT', rightStickVector)
-        end
+        stickListener('LEFT', leftStickVector)
+        stickListener('RIGHT', rightStickVector)
     end
 end
 
@@ -78,19 +74,19 @@ local upVector = {x = 0, y = -1}
 local downVector = {x = 0, y = 1}
 
 function  pointingLeft(vector)
-    return vector.x < 0 and pointing(vector, leftVector)
+    return magnitude(vector) > 0.8 and pointing(vector, leftVector)
 end
 
 function  pointingRight(vector)
-   return vector.x > 0 and pointing(vector, rightVector) 
+   return magnitude(vector) > 0.8 and pointing(vector, rightVector) 
 end
 
 function  pointingUp(vector)
-   return vector.y < 0 and pointing(vector, upVector) 
+   return magnitude(vector) > 0.8 and pointing(vector, upVector) 
 end
 
 function  pointingDown(vector)
-   return vector.y > 0 and pointing(vector, downVector) 
+   return magnitude(vector) > 0.8 and pointing(vector, downVector) 
 end
 
 function getDirection(vector)
@@ -133,7 +129,7 @@ end
 
 -- Get the angle between two vectors, this will return 0 -> 180 degress (in radians)
 function angleBetween(vector1, vector2)
-    return math.acos(dot(vector1, vector2))
+    return math.acos(dot(normalise(vector1), normalise(vector2)))
 end
 
 -- Get the angle between two vectors, this will return 0 -> +-180 degress (in radians),

@@ -22,3 +22,24 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 pixel_coords)
     return texture2D(texture, texture_coords) * vec4(1.0, 1.0 + abs(tan(time)), 1.0, 1.0);
 }
 ]]
+
+fx.fov = love.graphics.newPixelEffect[[
+
+extern vec2 supervisorNormal;
+extern vec2 supervisorPos;
+
+vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 pixel_coords) 
+{
+    float alpha = 1.0;
+    vec2 toPixel = pixel_coords - supervisorPos;
+    float angle =  acos(dot(supervisorNormal, normalize(toPixel)));
+    if ( length(toPixel) < 250 && angle < 0.873f && angle > -0.873f ) 
+    {
+        vec4 col = texture2D(texture, texture_coords);
+        return col * vec4(3.0, 1.2, 1.2, 0.8);
+    }
+    return texture2D(texture, texture_coords);
+}
+
+
+]]

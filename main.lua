@@ -42,6 +42,7 @@ local currentLevel = 1
 local warnings = 0
 local renderGrid = nil
 local playerTile = nil
+local renderSupervisor = nil
 
 
 -- ********* LOVE FUNCTIONS *********
@@ -60,17 +61,22 @@ function love.load()
     gt = 0
     state = PLAY
     renderGrid = newGrid(LEVELS[currentLevel])
+    local sup = LEVELS[currentLevel].supervisor
+    renderSupervisor = {pos = { x = 400, y = 300 }, 
+                        normal =  sup.direction, state = NONE}
 end
 
-function love.update(dt)    
+function love.update(dt)
     if state == PLAY then
         gt = gt + dt
-        fx.pulseRed:send( "time", gt )
-        fx.pulseGreen:send( "time", gt )
+        fx.fov:send("supervisorNormal", {renderSupervisor.normal.x, renderSupervisor.normal.y})
+        fx.fov:send("supervisorPos", {renderSupervisor.pos.x, 600 - renderSupervisor.pos.y})
         controller:update()
         updateWorkers()
         workerAnim:update(dt)
         tween.update(dt)
+
+        renderSupervisor.normal = rotateNormal(renderSupervisor.normal, -0.01)
     end
 end
 
@@ -78,6 +84,7 @@ function love.draw()
     love.graphics.draw(bg, 0, 0)
     if state == PLAY then
         renderGrid:draw()
+        drawSupervisor(renderSupervisor.pos.x, renderSupervisor.pos.y)
     elseif state == NO_CONTROLLER then
         love.graphics.print("NO CONTROLLER FOUND!", 100, 100)
     end
@@ -260,8 +267,6 @@ function newGridItem(type)
         gi.draw = drawWorker
     elseif gi.type == PLAYER then
         gi.draw = drawPlayer
-    elseif gi.type == SUPERVISOR then
-        gi.draw = drawSupervisor
     else
         gi.draw = drawSpace
     end
@@ -280,11 +285,11 @@ function drawWorker(x, y, item)
         love.graphics.setColor(255, 255, 255)
         love.graphics.print('MOV', x, y)
     elseif item.state == CONVERTED then
-        love.graphics.setPixelEffect(fx.pulseGreen)
         love.graphics.setColor(255, 255, 255)
     else
-        love.graphics.setPixelEffect(fx.pulseRed)
     end
+
+    love.graphics.setPixelEffect(fx.fov)
     workerAnim:draw(x, y)
     love.graphics.setPixelEffect()
 end
@@ -303,14 +308,15 @@ function drawPlayer(x, y, item)
     
 end
 
-function drawSupervisor(x, y, item)
-    love.graphics.setColor(0, 0, 255)
-    love.graphics.rectangle('fill', x, y, 60, 60)
+function drawSupervisor(x, y)
+    love.graphics.setColor(255, 0, 0)
+    love.graphics.circle('fill', x, y, 10, 10)
+    love.graphics.setColor(255, 255, 255)
 end
 
 function drawSpace(x, y, item)
-    love.graphics.setColor(255, 255, 255)
-    love.graphics.rectangle('fill', x, y, 60, 60)
+    --love.graphics.setColor(255, 255, 255)
+    --love.graphics.rectangle('fill', x, y, 60, 60)
 end
 
 function swapPositions(worker)
@@ -326,12 +332,19 @@ function swapFinished(worker)
     worker.state = CONVERTED
 end
 
+function rotateNormal(normal, degrees)
+    return normalise({ 
+        x = math.cos(degrees) * normal.x - math.sin(degrees) * normal.y,
+        y = math.sin(degrees) * normal.x + math.cos(degrees) * normal.y
+    })
+end
+
 -- ********* LEVEL LAYOUTS *********
 
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,
-        supervisors = {{tileX = 0, tileY = 0}},
+        supervisor = { tileX = 0, tileY = 0, direction = { x = -1, y = 0} },
         grid={
             {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
