@@ -42,7 +42,6 @@ local currentLevel = 1
 local warnings = 0
 local renderGrid = nil
 local playerTile = nil
-local renderSupervisor = nil
 
 
 -- ********* LOVE FUNCTIONS *********
@@ -54,29 +53,26 @@ function love.load()
     workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
 
     controller = getController(1, buttonListener, stickListener)
-    if controller == nil then
-        state = NO_CONTROLLER
-        return
-    end
-    gt = 0
+    --if controller == nil then
+    --    state = NO_CONTROLLER
+    --    return
+    --end
     state = PLAY
     renderGrid = newGrid(LEVELS[currentLevel])
-    local sup = LEVELS[currentLevel].supervisor
-    renderSupervisor = {pos = { x = 400, y = 300 }, 
-                        normal =  sup.direction, state = NONE}
+    positionSupervisor()
+    startSupervisor()
 end
 
 function love.update(dt)
     if state == PLAY then
-        gt = gt + dt
-        fx.fov:send("supervisorNormal", {renderSupervisor.normal.x, renderSupervisor.normal.y})
-        fx.fov:send("supervisorPos", {renderSupervisor.pos.x, 600 - renderSupervisor.pos.y})
-        controller:update()
+        fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y})
+        fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x, 600 - renderGrid.supervisor.pos.y})
+        if controller ~= nil then
+            controller:update()
+        end
         updateWorkers()
         workerAnim:update(dt)
         tween.update(dt)
-
-        renderSupervisor.normal = rotateNormal(renderSupervisor.normal, -0.01)
     end
 end
 
@@ -84,7 +80,7 @@ function love.draw()
     love.graphics.draw(bg, 0, 0)
     if state == PLAY then
         renderGrid:draw()
-        drawSupervisor(renderSupervisor.pos.x, renderSupervisor.pos.y)
+        drawSupervisor(renderGrid.supervisor.pos.x, renderGrid.supervisor.pos.y)
     elseif state == NO_CONTROLLER then
         love.graphics.print("NO CONTROLLER FOUND!", 100, 100)
     end
@@ -205,6 +201,30 @@ end
 -- ********* GRID ********* 
 
 
+function positionSupervisor()
+    sup = renderGrid.supervisor
+    tile = renderGrid.data[sup.tileX][sup.tileY]
+    sup.pos = { x = tile.pos.x, y = tile.pos.y}
+end
+
+function startSupervisor()
+    sup = renderGrid.supervisor
+    nextTile = getNextTile(sup.tileX, sup.tileY, sup.normal)
+    if nextTile ~= nil then
+        tween.start(1, sup.pos, { x = nextTile.pos.x }, 'linear', startSupervisor)
+        sup.tileX = nextTile.localX
+        sup.tileY = nextTile.localY
+    end
+end
+
+function getNextTile(currentTileX, currentTileY, direction)
+    if direction.x == 1 and currentTileX < #renderGrid.data then
+        return renderGrid.data[currentTileX + 1][currentTileY]
+    else
+        return renderGrid.data[currentTileX][currentTileY + 1]
+    end
+end
+
 local grid = {}
 grid.__index = grid
 
@@ -213,19 +233,26 @@ function newGrid(level)
     g.x = level.x
     g.y = level.y
     g.tileSize = level.tileSize
-    g.data = loadGrid(level.grid, level.x, level.y)
+    g.data = loadGrid(level.grid, level.x, level.y, level.tileSize)
     g.width = #g.data
     g.height = #g.data[1]
+    local sup = LEVELS[currentLevel].supervisor
+    g.supervisor =  {tileX = sup.tileX, tileY = sup.tileY, 
+                        normal =  sup.direction, state = NONE}
     return setmetatable(g, grid)
 end
 
-function loadGrid(level, x, y)
+function loadGrid(level, x, y, tileSize)
     parsedGrid = {}
     for i=1, table.getn(level) do
         parsedGrid[i] = {}
         for j=1, table.getn(level[i]) do
             item = newGridItem(level[i][j])
-            item.pos = {x = i, y = j}
+            item.localX = i
+            item.localY = j
+            tileX = x + (tileSize * (i - 1))
+            tileY = y + (tileSize * (j - 1)) 
+            item.pos = {x = tileX, y = tileY}
             if item.type == PLAYER then
                 playerTile = item
             end
@@ -238,10 +265,8 @@ end
 function grid:draw()
     for i=1, table.getn(self.data) do
         for j=1, table.getn(self.data[i]) do
-            tileX = self.x + (self.tileSize * (i - 1))
-            tileY = self.y + (self.tileSize * (j - 1))
             it = self.data[i][j]
-            it.draw(tileX, tileY, it)
+            it.draw(it)
         end
     end
 end
@@ -273,12 +298,12 @@ function newGridItem(type)
     return setmetatable(gi, gridItem)
 end
 
-function drawWorker(x, y, item)
+function drawWorker(item)
     love.graphics.setColor(255, 255, 255)
 
     if item.state == CONVERTING then
         love.graphics.setColor(255, 0, 0)
-        love.graphics.rectangle('fill', x, y,
+        love.graphics.rectangle('fill', item.pos.x, item.pos.y,
                                 item.conversionBar.width,
                                 item.conversionBar.height)
     elseif item.state == MOVING then
@@ -290,33 +315,33 @@ function drawWorker(x, y, item)
     end
 
     love.graphics.setPixelEffect(fx.fov)
-    workerAnim:draw(x, y)
+    workerAnim:draw(item.pos.x, item.pos.y)
     love.graphics.setPixelEffect()
 end
 
-function drawPlayer(x, y, item)
+function drawPlayer(item)
     love.graphics.setColor(255, 0, 0)
-    love.graphics.rectangle('fill', x, y, 60, 60)
+    love.graphics.rectangle('fill', item.pos.x, item.pos.y, 60, 60)
     love.graphics.setColor(0, 0, 0)
     if item.state == TALKING then
         love.graphics.print('T', x + 5, y + 10)
     elseif item.state == MOVING then
-        love.graphics.print('MOV', x + 5, y + 10)
+        love.graphics.print('MOV', item.pos.x + 5, item.pos.y + 10)
     else
-        love.graphics.print('P1', x + 5, y + 10)
+        love.graphics.print('P1', item.pos.x + 5, item.pos.y + 10)
     end
     
 end
 
 function drawSupervisor(x, y)
     love.graphics.setColor(255, 0, 0)
-    love.graphics.circle('fill', x, y, 10, 10)
+    love.graphics.circle('fill', x + 32, y + 32, 10, 10)
     love.graphics.setColor(255, 255, 255)
 end
 
-function drawSpace(x, y, item)
-    --love.graphics.setColor(255, 255, 255)
-    --love.graphics.rectangle('fill', x, y, 60, 60)
+function drawSpace(item)
+    love.graphics.setColor(255, 255, 255)
+    love.graphics.rectangle('fill', item.pos.x, item.pos.y, 64, 64)
 end
 
 function swapPositions(worker)
@@ -344,7 +369,7 @@ end
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,
-        supervisor = { tileX = 0, tileY = 0, direction = { x = -1, y = 0} },
+        supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
         grid={
             {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
