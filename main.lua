@@ -34,6 +34,10 @@ local DOWN = 4
 local CONVERTING = 1
 local CONVERTED = 2
 
+-- Supervisor State
+local WALKING = 1
+local TURNING = 2
+
 -- Current states
 local playerTarget = NONE
 
@@ -60,24 +64,27 @@ function love.load()
     state = PLAY
     renderGrid = newGrid(LEVELS[currentLevel])
     positionSupervisor()
-    startSupervisor()
+    moveSupervisor()
 end
 
 function love.update(dt)
     if state == PLAY then
         fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y})
-        fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x, 600 - renderGrid.supervisor.pos.y})
+        fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
         if controller ~= nil then
             controller:update()
         end
         updateWorkers()
+        updateSupervisor()
         workerAnim:update(dt)
         tween.update(dt)
     end
 end
 
 function love.draw()
+    love.graphics.setPixelEffect(fx.fov)
     love.graphics.draw(bg, 0, 0)
+    love.graphics.setPixelEffect()
     if state == PLAY then
         renderGrid:draw()
         drawSupervisor(renderGrid.supervisor.pos.x, renderGrid.supervisor.pos.y)
@@ -205,23 +212,75 @@ function positionSupervisor()
     sup = renderGrid.supervisor
     tile = renderGrid.data[sup.tileX][sup.tileY]
     sup.pos = { x = tile.pos.x, y = tile.pos.y}
+    sup.state = WALKING
 end
 
-function startSupervisor()
+function moveSupervisor()
     sup = renderGrid.supervisor
-    nextTile = getNextTile(sup.tileX, sup.tileY, sup.normal)
-    if nextTile ~= nil then
-        tween.start(1, sup.pos, { x = nextTile.pos.x }, 'linear', startSupervisor)
-        sup.tileX = nextTile.localX
-        sup.tileY = nextTile.localY
+    nextTile, newDirection = getNextTile(sup.tileX, sup.tileY, sup.normal)
+    if nextTile ~= nil and sup.state == WALKING then
+        if newDirection ~= nil then
+            sup.turnSpeed = -0.1
+            sup.state = TURNING
+        else
+            tween.start(0.3, sup.pos, { x = nextTile.pos.x }, 'linear')
+            tween.start(0.3, sup.pos, { y = nextTile.pos.y }, 'linear', moveSupervisor)
+            sup.tileX = nextTile.localX
+            sup.tileY = nextTile.localY
+        end
     end
 end
 
+local turned = 0.0
+
+function updateSupervisor()
+    sup = renderGrid.supervisor
+    if sup.state == TURNING then
+        turned = turned + sup.turnSpeed
+        if math.abs(turned) < 1.57 then
+            sup.normal = rotateNormal(sup.normal, sup.turnSpeed)
+        else
+            turned = 0
+            sup.normal.x = round(sup.normal.x)
+            sup.normal.y = round(sup.normal.y)
+            sup.state = WALKING
+            moveSupervisor()
+        end
+    end
+end
+
+function round(x)
+  if x%2 ~= 0.5 then
+    return math.floor(x+0.5)
+  end
+  return x-0.5
+end
+
 function getNextTile(currentTileX, currentTileY, direction)
-    if direction.x == 1 and currentTileX < #renderGrid.data then
-        return renderGrid.data[currentTileX + 1][currentTileY]
-    else
-        return renderGrid.data[currentTileX][currentTileY + 1]
+    if direction.x ~= 0 then
+        if direction.x == 1 and currentTileX < #renderGrid.data then
+            return renderGrid.data[currentTileX + 1][currentTileY]
+        elseif direction.x == -1 and currentTileX > 1 then
+            return renderGrid.data[currentTileX - 1][currentTileY]
+        else
+            if renderGrid.data[currentTileX][currentTileY + 1] ~= nil then
+                return renderGrid.data[currentTileX][currentTileY + 1], { x = 0, y = -1}
+            else
+                return renderGrid.data[currentTileX][currentTileY - 1], { x = 0, y = 1}
+            end
+        end
+    elseif direction.y ~= 0 then
+        if direction.y == -1 and currentTileY < #renderGrid.data[1] then
+            return renderGrid.data[currentTileX][currentTileY + 1]
+        elseif direction.y == 1 and currentTileY and currentTileY > 1 then
+            return renderGrid.data[currentTileX][currentTileY - 1]
+        else
+            if renderGrid.data[currentTileX + 1] ~= nil then
+                return renderGrid.data[currentTileX + 1][currentTileY], { x = 1, y = 0}
+            else
+                return renderGrid.data[currentTileX -1][currentTileY], { x = -1, y = 0}
+            end
+        end
     end
 end
 
@@ -237,7 +296,7 @@ function newGrid(level)
     g.width = #g.data
     g.height = #g.data[1]
     local sup = LEVELS[currentLevel].supervisor
-    g.supervisor =  {tileX = sup.tileX, tileY = sup.tileY, 
+    g.supervisor =  {tileX = sup.tileX, tileY = sup.tileY, turnSpeed = 0,
                         normal =  sup.direction, state = NONE}
     return setmetatable(g, grid)
 end
@@ -340,8 +399,8 @@ function drawSupervisor(x, y)
 end
 
 function drawSpace(item)
-    love.graphics.setColor(255, 255, 255)
-    love.graphics.rectangle('fill', item.pos.x, item.pos.y, 64, 64)
+    --love.graphics.setColor(255, 255, 255)
+    --love.graphics.rectangle('fill', item.pos.x, item.pos.y, 64, 64)
 end
 
 function swapPositions(worker)
