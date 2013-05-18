@@ -8,8 +8,9 @@ local tween = require('tween')
 
 MENU = 0
 PLAYING = 1
-PAUSE = 2
-NO_CONTROLLER = 3
+STUNG = 2
+PAUSE = 4
+NO_CONTROLLER = 5
 
 state = MENU
 
@@ -54,6 +55,7 @@ function love.load()
     love.graphics.setCaption( 'Industrial Rule' )
     bg = love.graphics.newImage("assets/bg.png")
     worker = love.graphics.newImage("assets/worker.png")
+    convertedImg = love.graphics.newImage("assets/soc.png")
     workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
 
     controller = getController(1, buttonListener, stickListener)
@@ -61,6 +63,10 @@ function love.load()
     --    state = NO_CONTROLLER
     --    return
     --end
+    loadLevel()
+end
+
+function loadLevel()
     state = PLAY
     renderGrid = newGrid(LEVELS[currentLevel])
     positionSupervisor()
@@ -68,24 +74,28 @@ function love.load()
 end
 
 function love.update(dt)
-    if state == PLAY then
-        fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y})
-        fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
         if controller ~= nil then
             controller:update()
         end
+    if state == PLAY then
+        fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y})
+        fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
         updateWorkers()
         updateSupervisor()
         workerAnim:update(dt)
         tween.update(dt)
+        testCollisions()
     end
 end
 
 function love.draw()
-    love.graphics.setPixelEffect(fx.fov)
-    love.graphics.draw(bg, 0, 0)
-    love.graphics.setPixelEffect()
-    if state == PLAY then
+    if state == PLAY or state == STUNG then
+        love.graphics.setPixelEffect(fx.fov)
+        love.graphics.draw(bg, 0, 0)
+        love.graphics.setPixelEffect()
+        if state == STUNG then
+            love.graphics.print('You were taken out back and beaten!', 10, 10)
+        end
         renderGrid:draw()
         drawSupervisor(renderGrid.supervisor.pos.x, renderGrid.supervisor.pos.y)
     elseif state == NO_CONTROLLER then
@@ -96,7 +106,9 @@ end
 -- ********* CONTROLS *********
 
 function buttonListener(button)
-
+    if state == STUNG and button == 'CIRCLE' then
+        loadLevel()
+    end
 end
 
 function stickListener(stick, vector)
@@ -129,13 +141,13 @@ end
 
 function trySwap(direction)
     if direction == 'left' then
-        tile = getPlayerRelativeTile(-1, 0)
+        tile = getRelativeTile(playerTile, -1, 0)
     elseif direction == 'right' then
-        tile = getPlayerRelativeTile(1, 0)
+        tile = getRelativeTile(playerTile, 1, 0)
     elseif direction == 'up' then
-        tile = getPlayerRelativeTile(0, -1)
+        tile = getRelativeTile(playerTile, 0, -1)
     elseif direction == 'down' then
-        tile = getPlayerRelativeTile(0, 1)
+        tile = getRelativeTile(playerTile, 0, 1)
     end
     if tile ~= nil and tile.type == WORKER and tile.state == CONVERTED then
         swapPositions(tile)
@@ -164,6 +176,29 @@ function updateWorkers()
                             item.state = NONE
                             item.conversionBar = nil
                         end
+                    elseif item.state == CONVERTED then
+                        surroundings = {    getRelativeTile(item, 0, -1),
+                                            getRelativeTile(item, 0, 1),
+                                            getRelativeTile(item, -1, 0),
+                                            getRelativeTile(item, 1, 0)
+                                        }
+                        for idx, worker in ipairs(surroundings) do
+                            if worker ~= nil and worker.type == WORKER then
+                                if worker.state == NONE then
+                                    if worker.loyaltyTween == nil then
+                                        worker.loyaltyTween = tween.start(10, item, { loyalty = 0.0 }, 'linear',
+                                                                            loyaltyDry, item, worker)
+                                    end
+                                    break;
+                                elseif worker.state == CONVERTED then
+                                    if item.loyaltyTween ~= nil then
+                                        tween.stop(item.loyaltyTween)
+                                        item.loyaltyTween = nil
+                                        item.loyalty = 100
+                                    end
+                                end 
+                            end
+                        end
                     end
                 end
             end
@@ -177,8 +212,15 @@ function startConversionBar(item)
                                 'linear', conversionFinished, item)
 end
 
+function loyaltyDry(item, worker)
+    item.state = NONE
+    worker.loyaltyTween = nil
+end
+
 function conversionFinished(worker)
     worker.state = CONVERTED
+    worker.loyalty = 100
+    worker.conversionBar = nil
     worker.tween = nil
 end
 
@@ -195,14 +237,17 @@ function talking(worker)
 end
 
 function isTarget(direction, worker)
-    return playerTarget == LEFT and  worker == getPlayerRelativeTile(-1, 0) or
-        playerTarget == RIGHT and  worker == getPlayerRelativeTile(1, 0) or
-        playerTarget == UP and  worker == getPlayerRelativeTile(0, -1) or
-        playerTarget == DOWN and  worker == getPlayerRelativeTile(0, 1)
+    return playerTarget == LEFT and  worker == getRelativeTile(playerTile, -1, 0) or
+        playerTarget == RIGHT and  worker == getRelativeTile(playerTile, 1, 0) or
+        playerTarget == UP and  worker == getRelativeTile(playerTile, 0, -1) or
+        playerTarget == DOWN and  worker == getRelativeTile(playerTile, 0, 1)
 end
 
-function getPlayerRelativeTile(xOffset, yOffset)
-    return renderGrid.data[playerTile.pos.x + xOffset][playerTile.pos.y + yOffset]
+function getRelativeTile(tile, xOffset, yOffset)
+    if renderGrid.data[tile.localX + xOffset] == nil then
+        return nil
+    end
+    return renderGrid.data[tile.localX + xOffset][tile.localY + yOffset]
 end
 
 -- ********* GRID ********* 
@@ -223,8 +268,8 @@ function moveSupervisor()
             sup.turnSpeed = -0.1
             sup.state = TURNING
         else
-            tween.start(0.3, sup.pos, { x = nextTile.pos.x }, 'linear')
-            tween.start(0.3, sup.pos, { y = nextTile.pos.y }, 'linear', moveSupervisor)
+            tween.start(0.5, sup.pos, { x = nextTile.pos.x }, 'linear')
+            tween.start(0.5, sup.pos, { y = nextTile.pos.y }, 'linear', moveSupervisor)
             sup.tileX = nextTile.localX
             sup.tileY = nextTile.localY
         end
@@ -254,6 +299,38 @@ function round(x)
     return math.floor(x+0.5)
   end
   return x-0.5
+end
+
+local testAngle = 45
+local fovRadius = 250
+function testCollisions()
+
+    for i=1, table.getn(renderGrid.data) do
+        for j=1, table.getn(renderGrid.data[i]) do
+            item = renderGrid.data[i][j]
+            if item.type == PLAYER and 
+                (item.state == TALKING or item.state == MOVING) and 
+                isInFov(item) then
+                state = STUNG
+            end
+        end
+    end
+
+    return false
+end
+
+function isInFov(tile)
+    supervisorPos = renderGrid.supervisor.pos
+    vec = { x = item.pos.x - supervisorPos.x, y = item.pos.y - supervisorPos.y}
+    if magnitude(vec) < fovRadius then
+        -- Normal is set up to function in shader, which uses different coord system
+        localNormal = { x = renderGrid.supervisor.normal.x, y = renderGrid.supervisor.normal.y * -1 }
+        angle =  angleBetween(localNormal, vec);
+        if angle < 0.873 and angle > -0.873 then
+            return true
+        end
+    end
+    return false
 end
 
 function getNextTile(currentTileX, currentTileY, direction)
@@ -331,8 +408,14 @@ function grid:draw()
 end
 
 function grid:swap(item1, item2)
-    self.data[item1.pos.x][item1.pos.y] = item2
-    self.data[item2.pos.x][item2.pos.y] = item1
+    self.data[item1.localX][item1.localY] = item2
+    self.data[item2.localX][item2.localY] = item1
+    tmpLocalX = item1.localX
+    tmpLocalY = item1.localY
+    item1.localX = item2.localX
+    item1.localY = item2.localY
+    item2.localX = tmpLocalX
+    item2.localY = tmpLocalY
     tmpPos = item1.pos
     item1.pos = item2.pos
     item2.pos = tmpPos
@@ -359,6 +442,9 @@ end
 
 function drawWorker(item)
     love.graphics.setColor(255, 255, 255)
+    love.graphics.setPixelEffect(fx.fov)
+    workerAnim:draw(item.pos.x, item.pos.y)
+    love.graphics.setPixelEffect()
 
     if item.state == CONVERTING then
         love.graphics.setColor(255, 0, 0)
@@ -367,15 +453,24 @@ function drawWorker(item)
                                 item.conversionBar.height)
     elseif item.state == MOVING then
         love.graphics.setColor(255, 255, 255)
-        love.graphics.print('MOV', x, y)
+        love.graphics.print('MOV', item.pos.x, item.pos.y)
     elseif item.state == CONVERTED then
-        love.graphics.setColor(255, 255, 255)
+        pctLoyal = (item.loyalty * 32) / 100
+        stencil = { x = item.pos.x, y = item.pos.y + 32 + pctLoyal, 
+                    w = 64, h = 32}
+        love.graphics.setStencil(loyaltyStencil)
+        love.graphics.draw(convertedImg, item.pos.x, item.pos.y + 32)
+        love.graphics.setStencil( )
     else
     end
 
-    love.graphics.setPixelEffect(fx.fov)
-    workerAnim:draw(item.pos.x, item.pos.y)
-    love.graphics.setPixelEffect()
+end
+
+stencil = nil
+loyaltyStencil = function()
+    if stencil ~= nil then
+        love.graphics.rectangle("fill", stencil.x, stencil.y, stencil.w, stencil.h)
+    end
 end
 
 function drawPlayer(item)
@@ -383,7 +478,7 @@ function drawPlayer(item)
     love.graphics.rectangle('fill', item.pos.x, item.pos.y, 60, 60)
     love.graphics.setColor(0, 0, 0)
     if item.state == TALKING then
-        love.graphics.print('T', x + 5, y + 10)
+        love.graphics.print('T', item.pos.x + 5, item.pos.y + 10)
     elseif item.state == MOVING then
         love.graphics.print('MOV', item.pos.x + 5, item.pos.y + 10)
     else
