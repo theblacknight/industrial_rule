@@ -455,8 +455,8 @@ function drawWorker(item)
         love.graphics.setColor(255, 255, 255)
         love.graphics.print('MOV', item.pos.x, item.pos.y)
     elseif item.state == CONVERTED then
-        pctLoyal = item.loyalty / 100 * 32
-        stencil = { x = item.pos.x, y = item.pos.y + pctLoyal, 
+        pctLoyal = ((100 - item.loyalty) / 100) * 32
+        stencil = { x = item.pos.x, y = item.pos.y + 32 + pctLoyal,
                     w = 64, h = 32}
         love.graphics.setStencil(loyaltyStencil)
         love.graphics.draw(convertedImg, item.pos.x, item.pos.y + 32)
