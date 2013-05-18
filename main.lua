@@ -19,6 +19,7 @@ local EMPTY = 0
 local WORKER = 1
 local PLAYER = 2
 local SUPERVISOR = 3
+local BLOCK = 4
 
 -- Player states
 local NONE = 0
@@ -78,7 +79,7 @@ function love.update(dt)
             controller:update()
         end
     if state == PLAY then
-        fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y})
+        fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y * -1})
         fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
         updateWorkers()
         updateSupervisor()
@@ -208,7 +209,7 @@ end
 
 function startConversionBar(item)
     item.conversionBar = {width = 0, height = 10}
-    item.tween = tween.start(1, item.conversionBar, { width = 60 },
+    item.tween = tween.start(0.5, item.conversionBar, { width = 60 },
                                 'linear', conversionFinished, item)
 end
 
@@ -255,25 +256,54 @@ end
 
 function positionSupervisor()
     sup = renderGrid.supervisor
-    tile = renderGrid.data[sup.tileX][sup.tileY]
+    tile = renderGrid.data[sup.localX][sup.localY]
     sup.pos = { x = tile.pos.x, y = tile.pos.y}
     sup.state = WALKING
 end
 
 function moveSupervisor()
     sup = renderGrid.supervisor
-    nextTile, newDirection = getNextTile(sup.tileX, sup.tileY, sup.normal)
+    nextTile, newDirection = getNextTile()
     if nextTile ~= nil and sup.state == WALKING then
         if newDirection ~= nil then
-            sup.turnSpeed = -0.1
+            sup.turnSpeed = getTurnSpeed(sup.normal, newDirection)
             sup.state = TURNING
         else
             tween.start(0.5, sup.pos, { x = nextTile.pos.x }, 'linear')
             tween.start(0.5, sup.pos, { y = nextTile.pos.y }, 'linear', moveSupervisor)
-            sup.tileX = nextTile.localX
-            sup.tileY = nextTile.localY
+            sup.localX = nextTile.localX
+            sup.localY = nextTile.localY
         end
     end
+end
+
+function getTurnSpeed(oldDirection, newDirection)
+    if oldDirection.x == -1 then
+        if newDirection.y == -1 then
+            return 0.1
+        else
+            return -0.1
+        end
+    elseif oldDirection.x == 1 then
+        if newDirection.y == -1 then
+            return -0.1
+        else
+            return 0.1
+        end
+    elseif oldDirection.y == 1 then
+        if newDirection.x == -1 then
+            return 0.1
+        else
+            return -0.1
+        end
+    elseif oldDirection.y == -1 then
+        if newDirection.x == -1 then
+            return -0.1
+        else
+            return 0.1
+        end
+    end
+    return 1.0
 end
 
 local turned = 0.0
@@ -304,19 +334,16 @@ end
 local testAngle = 45
 local fovRadius = 250
 function testCollisions()
-
     for i=1, table.getn(renderGrid.data) do
         for j=1, table.getn(renderGrid.data[i]) do
             item = renderGrid.data[i][j]
             if item.type == PLAYER and 
                 (item.state == TALKING or item.state == MOVING) and 
                 isInFov(item) then
-                state = STUNG
+                    state = STUNG 
             end
         end
     end
-
-    return false
 end
 
 function isInFov(tile)
@@ -324,7 +351,7 @@ function isInFov(tile)
     vec = { x = item.pos.x - supervisorPos.x, y = item.pos.y - supervisorPos.y}
     if magnitude(vec) < fovRadius then
         -- Normal is set up to function in shader, which uses different coord system
-        localNormal = { x = renderGrid.supervisor.normal.x, y = renderGrid.supervisor.normal.y * -1 }
+        localNormal = { x = renderGrid.supervisor.normal.x, y = renderGrid.supervisor.normal.y }
         angle =  angleBetween(localNormal, vec);
         if angle < 0.873 and angle > -0.873 then
             return true
@@ -333,32 +360,53 @@ function isInFov(tile)
     return false
 end
 
-function getNextTile(currentTileX, currentTileY, direction)
-    if direction.x ~= 0 then
-        if direction.x == 1 and currentTileX < #renderGrid.data then
-            return renderGrid.data[currentTileX + 1][currentTileY]
-        elseif direction.x == -1 and currentTileX > 1 then
-            return renderGrid.data[currentTileX - 1][currentTileY]
-        else
-            if renderGrid.data[currentTileX][currentTileY + 1] ~= nil then
-                return renderGrid.data[currentTileX][currentTileY + 1], { x = 0, y = -1}
-            else
-                return renderGrid.data[currentTileX][currentTileY - 1], { x = 0, y = 1}
+function getNextTile()
+    sup = renderGrid.supervisor
+    options =   {  
+                    {getRelativeTile(sup, sup.normal.x, sup.normal.y), nil},
+                    getRightTile(sup, sup.normal),
+                    getLeftTile(sup, sup.normal),
+                    {getRelativeTile(sup, sup.normal.x * -1, sup.normal.y * -1),
+                        { x = sup.normal.x * -1, y = sup.normal.y * -1 } }
+                }
+    for i, tile in pairs(options) do
+        if tile ~= nil and isWalkableTile(tile[1]) then
+            if tile[2] ~= nil then
+                print('Direction: ', tile[2].x, tile[2].y)
             end
-        end
-    elseif direction.y ~= 0 then
-        if direction.y == -1 and currentTileY < #renderGrid.data[1] then
-            return renderGrid.data[currentTileX][currentTileY + 1]
-        elseif direction.y == 1 and currentTileY and currentTileY > 1 then
-            return renderGrid.data[currentTileX][currentTileY - 1]
-        else
-            if renderGrid.data[currentTileX + 1] ~= nil then
-                return renderGrid.data[currentTileX + 1][currentTileY], { x = 1, y = 0}
-            else
-                return renderGrid.data[currentTileX -1][currentTileY], { x = -1, y = 0}
-            end
+            return tile[1], tile[2]
         end
     end
+end
+
+function isWalkableTile(tile)
+    return tile ~= nil and tile.type == EMPTY
+end
+
+function getRightTile(baseTile, normal)
+    if normal.x == 1 then
+        return {getRelativeTile(sup, 0, 1), { x = 0, y = 1}}
+    elseif normal.x == -1 then
+        return {getRelativeTile(sup, 0, -1), { x = 0, y = -1}}
+    elseif normal.y == 1 then
+        return {getRelativeTile(sup, -1, 0), { x = -1, y = 0}}
+    elseif normal.y == -1 then
+        return {getRelativeTile(sup, 1, 0), { x = 1, y = 0}}
+    end
+    return nil
+end
+
+function getLeftTile(baseTile, normal)
+    if normal.x == 1 then
+        return {getRelativeTile(sup, 0, -1), { x = 0, y = -1}}
+    elseif normal.x == -1 then
+        return {getRelativeTile(sup, 0, 1), { x = 0, y = 1}}
+    elseif normal.y == 1 then
+        return {getRelativeTile(sup, 1, 0), { x = 1, y = 0}}
+    elseif normal.y == -1 then
+        return {getRelativeTile(sup, -1, 0), { x = -1, y = 0}}
+    end
+    return nil
 end
 
 local grid = {}
@@ -373,7 +421,7 @@ function newGrid(level)
     g.width = #g.data
     g.height = #g.data[1]
     local sup = LEVELS[currentLevel].supervisor
-    g.supervisor =  {tileX = sup.tileX, tileY = sup.tileY, turnSpeed = 0,
+    g.supervisor =  {localX = sup.tileX, localY = sup.tileY, turnSpeed = 0,
                         normal =  sup.direction, state = NONE}
     return setmetatable(g, grid)
 end
@@ -502,7 +550,7 @@ function swapPositions(worker)
     playerTile.state = MOVING
     worker.state = MOVING
     timer = {t = 0}
-    tween.start(1, timer, { t = 100 }, 'linear', swapFinished, worker)
+    tween.start(0.5, timer, { t = 100 }, 'linear', swapFinished, worker)
 end
 
 function swapFinished(worker)
@@ -523,7 +571,7 @@ end
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,
-        supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
+        supervisor = { tileX = 1, tileY = 6, direction = { x = 1, y = 0} },
         grid={
             {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
