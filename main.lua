@@ -195,7 +195,6 @@ function updateWorkers()
                                     if item.loyaltyTween ~= nil then
                                         tween.stop(item.loyaltyTween)
                                         item.loyaltyTween = nil
-                                        item.loyalty = 100
                                     end
                                 end 
                             end
@@ -371,9 +370,6 @@ function getNextTile()
                 }
     for i, tile in pairs(options) do
         if tile ~= nil and isWalkableTile(tile[1]) then
-            if tile[2] ~= nil then
-                print('Direction: ', tile[2].x, tile[2].y)
-            end
             return tile[1], tile[2]
         end
     end
@@ -429,18 +425,22 @@ end
 function loadGrid(level, x, y, tileSize)
     parsedGrid = {}
     for i=1, table.getn(level) do
-        parsedGrid[i] = {}
         for j=1, table.getn(level[i]) do
+            column = parsedGrid[j]
+            if column == nil then
+                column = {}
+                table.insert(parsedGrid, column)
+            end
             item = newGridItem(level[i][j])
-            item.localX = i
-            item.localY = j
-            tileX = x + (tileSize * (i - 1))
-            tileY = y + (tileSize * (j - 1)) 
+            item.localX = j
+            item.localY = i
+            tileX = x + (tileSize * (j - 1))
+            tileY = y + (tileSize * (i - 1))
             item.pos = {x = tileX, y = tileY}
             if item.type == PLAYER then
                 playerTile = item
             end
-            table.insert(parsedGrid[i], item)
+            table.insert(column, item)
         end
     end
     return parsedGrid
@@ -542,8 +542,11 @@ function drawSupervisor(x, y)
 end
 
 function drawSpace(item)
-    --love.graphics.setColor(255, 255, 255)
-    --love.graphics.rectangle('fill', item.pos.x, item.pos.y, 64, 64)
+    if item.type == 4 then
+        love.graphics.setColor(0, 0, 0)
+        love.graphics.circle('fill', item.pos.x + 32, item.pos.y + 32, 10, 10)
+        love.graphics.setColor(255, 255, 255) 
+    end
 end
 
 function swapPositions(worker)
@@ -571,14 +574,13 @@ end
 LEVELS = {
     {
         tileSize = 64, x = 200, y = 100,
-        supervisor = { tileX = 1, tileY = 6, direction = { x = 1, y = 0} },
+        supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
         grid={
-            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
-            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
-            {EMPTY, WORKER, PLAYER, WORKER, WORKER, EMPTY},
-            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
-            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
-            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
+            {EMPTY, PLAYER, WORKER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, EMPTY, EMPTY},
+            {EMPTY, WORKER, WORKER, EMPTY},
+            {EMPTY, EMPTY, EMPTY, BLOCK}
         }
     }
 }
