@@ -56,8 +56,11 @@ function love.load()
     love.graphics.setCaption( 'Industrial Rule' )
     bg = love.graphics.newImage("assets/bg.png")
     worker = love.graphics.newImage("assets/worker.png")
+    player = love.graphics.newImage("assets/player.png")
     convertedImg = love.graphics.newImage("assets/soc.png")
     workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
+    playerAnim = newAnimation(player, 64, 64, 0.5, 8)
+    playerAnim:setSequence(1, 2)
 
     controller = getController(1, buttonListener, stickListener)
     --if controller == nil then
@@ -84,6 +87,7 @@ function love.update(dt)
         updateWorkers()
         updateSupervisor()
         workerAnim:update(dt)
+        playerAnim:update(dt)
         tween.update(dt)
         testCollisions()
     end
@@ -522,15 +526,23 @@ loyaltyStencil = function()
 end
 
 function drawPlayer(item)
-    love.graphics.setColor(255, 0, 0)
-    love.graphics.rectangle('fill', item.pos.x, item.pos.y, 60, 60)
-    love.graphics.setColor(0, 0, 0)
+    love.graphics.setPixelEffect(fx.fov)
+    playerAnim:draw(item.pos.x, item.pos.y)
+    love.graphics.setPixelEffect()
     if item.state == TALKING then
-        love.graphics.print('T', item.pos.x + 5, item.pos.y + 10)
+        if playerTarget == LEFT then
+            playerAnim:setSequence(7, 7)
+        elseif playerTarget == RIGHT then
+            playerAnim:setSequence(8, 8)
+        elseif playerTarget == UP then
+            playerAnim:setSequence(6, 6)
+        else 
+            playerAnim:setSequence(1, 1)
+        end
     elseif item.state == MOVING then
         love.graphics.print('MOV', item.pos.x + 5, item.pos.y + 10)
     else
-        love.graphics.print('P1', item.pos.x + 5, item.pos.y + 10)
+        playerAnim:setSequence(1, 2)
     end
     
 end
