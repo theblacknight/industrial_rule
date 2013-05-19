@@ -59,6 +59,8 @@ function love.load()
     player = love.graphics.newImage("assets/player.png")
     convertedImg = love.graphics.newImage("assets/soc.png")
     workerAnim = newAnimation(worker, 64, 64, 0.5, 2)
+    movingWorkerAnim = newAnimation(worker, 64, 64, 0.3, 5)
+    movingWorkerAnim:setSequence(3, 5)
     playerAnim = newAnimation(player, 64, 64, 0.5, 8)
     playerAnim:setSequence(1, 2)
 
@@ -87,9 +89,10 @@ function love.update(dt)
         updateWorkers()
         updateSupervisor()
         workerAnim:update(dt)
+        movingWorkerAnim:update(dt)
         playerAnim:update(dt)
         tween.update(dt)
-        testCollisions()
+        --testCollisions()
     end
 end
 
@@ -494,26 +497,28 @@ end
 
 function drawWorker(item)
     love.graphics.setColor(255, 255, 255)
-    love.graphics.setPixelEffect(fx.fov)
-    workerAnim:draw(item.pos.x, item.pos.y)
-    love.graphics.setPixelEffect()
 
-    if item.state == CONVERTING then
-        love.graphics.setColor(255, 0, 0)
-        love.graphics.rectangle('fill', item.pos.x, item.pos.y,
-                                item.conversionBar.width,
-                                item.conversionBar.height)
+    if item.state == NONE or item.state == CONVERTING or item.state == CONVERTED then
+        love.graphics.setPixelEffect(fx.fov)
+        workerAnim:draw(item.pos.x, item.pos.y)
+        love.graphics.setPixelEffect()
+        if item.state == CONVERTING then
+            love.graphics.setColor(255, 0, 0)
+            love.graphics.rectangle('fill', item.pos.x, item.pos.y,
+                                    item.conversionBar.width,
+                                    item.conversionBar.height)
+        elseif item.state == CONVERTED then
+            pctLoyal = ((100 - item.loyalty) / 100) * 32
+            stencil = { x = item.pos.x, y = item.pos.y + 32 + pctLoyal,
+                        w = 64, h = 32}
+            love.graphics.setStencil(loyaltyStencil)
+            love.graphics.draw(convertedImg, item.pos.x, item.pos.y + 32)
+            love.graphics.setStencil( )
+        end
     elseif item.state == MOVING then
-        love.graphics.setColor(255, 255, 255)
-        love.graphics.print('MOV', item.pos.x, item.pos.y)
-    elseif item.state == CONVERTED then
-        pctLoyal = ((100 - item.loyalty) / 100) * 32
-        stencil = { x = item.pos.x, y = item.pos.y + 32 + pctLoyal,
-                    w = 64, h = 32}
-        love.graphics.setStencil(loyaltyStencil)
-        love.graphics.draw(convertedImg, item.pos.x, item.pos.y + 32)
-        love.graphics.setStencil( )
-    else
+        love.graphics.setPixelEffect(fx.fov)
+        movingWorkerAnim:draw(item.pos.x, item.pos.y)
+        love.graphics.setPixelEffect()
     end
 
 end
@@ -540,7 +545,7 @@ function drawPlayer(item)
             playerAnim:setSequence(1, 1)
         end
     elseif item.state == MOVING then
-        love.graphics.print('MOV', item.pos.x + 5, item.pos.y + 10)
+        
     else
         playerAnim:setSequence(1, 2)
     end
@@ -564,6 +569,10 @@ end
 function swapPositions(worker)
     playerTile.state = MOVING
     worker.state = MOVING
+
+    movingWorkerAnim:setSequence(3, 5)
+    playerAnim:setSequence(3, 5)
+
     timer = {t = 0}
     tween.start(0.5, timer, { t = 100 }, 'linear', swapFinished, worker)
 end
@@ -572,6 +581,9 @@ function swapFinished(worker)
     renderGrid:swap(playerTile, worker)
     playerTile.state = NONE
     worker.state = CONVERTED
+
+    movingWorkerAnim:setSequence(4, 5)
+    playerAnim:setSequence(4, 5)
 end
 
 function rotateNormal(normal, degrees)
@@ -588,7 +600,7 @@ LEVELS = {
         tileSize = 64, x = 200, y = 100,
         supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
         grid={
-            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
+            {BLOCK, EMPTY, EMPTY, EMPTY, EMPTY},
             {EMPTY, PLAYER, WORKER, WORKER, EMPTY},
             {EMPTY, WORKER, WORKER, EMPTY, EMPTY},
             {EMPTY, WORKER, WORKER, EMPTY},
