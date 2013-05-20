@@ -83,6 +83,7 @@ function love.update(dt)
         if controller ~= nil then
             controller:update()
         end
+        keyListener(dt)
     if state == PLAY then
         fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y * -1})
         fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
@@ -92,7 +93,7 @@ function love.update(dt)
         movingWorkerAnim:update(dt)
         playerAnim:update(dt)
         tween.update(dt)
-        --testCollisions()
+        testCollisions()
     end
 end
 
@@ -138,6 +139,30 @@ function stickListener(stick, vector)
     else
         if playerTile.state == NONE and currentDirection ~= nil then
             trySwap(currentDirection)
+        end
+    end
+end
+
+function keyListener(dt)
+    if state == PLAY then
+        if love.keyboard.isDown("right") then
+            stickListener('RIGHT', { x = 1, y = 0})
+        elseif love.keyboard.isDown("left") then
+            stickListener('RIGHT', { x = -1, y = 0})
+        elseif love.keyboard.isDown("up") then
+            stickListener('RIGHT', { x = 0, y = -1})
+        elseif love.keyboard.isDown("down") then
+            stickListener('RIGHT', { x = 0, y = 1})
+        elseif love.keyboard.isDown("w") then
+            stickListener('LEFT', { x = 0, y = -1})
+        elseif love.keyboard.isDown("a") then
+            stickListener('LEFT', { x = -1, y = 0})
+        elseif love.keyboard.isDown("s") then
+            stickListener('LEFT', { x = 0, y = 1})
+        elseif love.keyboard.isDown("d") then
+            stickListener('LEFT', { x = 1, y = 0})
+        else
+            stickListener('LEFT', { x = 0, y = 0})
         end
     end
 end
@@ -600,11 +625,11 @@ LEVELS = {
         tileSize = 64, x = 200, y = 100,
         supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
         grid={
-            {BLOCK, EMPTY, EMPTY, EMPTY, EMPTY},
-            {EMPTY, PLAYER, WORKER, WORKER, EMPTY},
-            {EMPTY, WORKER, WORKER, EMPTY, EMPTY},
-            {EMPTY, WORKER, WORKER, EMPTY},
-            {EMPTY, EMPTY, EMPTY, BLOCK}
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY},
+            {EMPTY, PLAYER, WORKER, WORKER, WORKER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY, EMPTY},
+            {EMPTY, WORKER, WORKER, WORKER, EMPTY, EMPTY},
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}
         }
     }
 }
