@@ -11,6 +11,8 @@ PLAYING = 1
 STUNG = 2
 PAUSE = 4
 NO_CONTROLLER = 5
+WINNER = 6
+FINISHED = 7
 
 state = MENU
 
@@ -55,6 +57,7 @@ local playerTile = nil
 function love.load()
     love.graphics.setCaption( 'Industrial Rule' )
     bg = love.graphics.newImage("assets/bg.png")
+    menu = love.graphics.newImage("assets/menu.png")
     worker = love.graphics.newImage("assets/worker.png")
     player = love.graphics.newImage("assets/player.png")
     convertedImg = love.graphics.newImage("assets/soc.png")
@@ -65,26 +68,23 @@ function love.load()
     playerAnim:setSequence(1, 2)
 
     controller = getController(1, buttonListener, stickListener)
-    --if controller == nil then
-    --    state = NO_CONTROLLER
-    --    return
-    --end
-    loadLevel()
 end
 
 function loadLevel()
     state = PLAY
+    playerTarget = NONE
     renderGrid = newGrid(LEVELS[currentLevel])
     positionSupervisor()
     moveSupervisor()
 end
 
 function love.update(dt)
-        if controller ~= nil then
-            controller:update()
-        end
-        keyListener(dt)
+    if controller ~= nil then
+        controller:update()
+    end
+    keyListener(dt)
     if state == PLAY then
+        testForWin()
         fx.fov:send("supervisorNormal", {renderGrid.supervisor.normal.x, renderGrid.supervisor.normal.y * -1})
         fx.fov:send("supervisorPos", {renderGrid.supervisor.pos.x + 32, 568 - renderGrid.supervisor.pos.y})
         updateWorkers()
@@ -98,25 +98,39 @@ function love.update(dt)
 end
 
 function love.draw()
-    if state == PLAY or state == STUNG then
+    if state == MENU then
+        love.graphics.draw(menu, 0, 0)
+    elseif state == PLAY or state == STUNG or state == WINNER then
         love.graphics.setPixelEffect(fx.fov)
         love.graphics.draw(bg, 0, 0)
         love.graphics.setPixelEffect()
         if state == STUNG then
-            love.graphics.print('You were taken out back and beaten!', 10, 10)
+            drawRetry()
+        elseif state == WINNER then
+            drawNewLevel()
         end
         renderGrid:draw()
         drawSupervisor(renderGrid.supervisor.pos.x, renderGrid.supervisor.pos.y)
-    elseif state == NO_CONTROLLER then
-        love.graphics.print("NO CONTROLLER FOUND!", 100, 100)
+        drawStatus()
+    elseif state == FINISHED then
+        drawFinished()
     end
 end
 
 -- ********* CONTROLS *********
 
 function buttonListener(button)
-    if state == STUNG and button == 'CIRCLE' then
-        loadLevel()
+    if button == 'X' then
+        if state == STUNG then
+            loadLevel()
+        elseif state == MENU then
+            loadLevel()
+        elseif state == WINNER then
+            currentLevel = currentLevel + 1
+            loadLevel()
+        elseif state == FINISHED then
+            love.event.quit()
+        end
     end
 end
 
@@ -165,6 +179,9 @@ function keyListener(dt)
             stickListener('LEFT', { x = 0, y = 0})
         end
     end
+    if love.keyboard.isDown(" ") then
+        buttonListener('X')
+    end
 end
 
 function setPlayerState(state, direction)
@@ -188,6 +205,16 @@ function trySwap(direction)
 end
 
 -- GAME LOGIC
+
+function testForWin()
+    if renderGrid.workerCount == renderGrid.converted then
+        if currentLevel == #LEVELS then
+            state = FINISHED
+        else
+            state = WINNER
+        end
+    end
+end
 
 function updateWorkers()
     for i=1, table.getn(renderGrid.data) do
@@ -251,6 +278,7 @@ end
 
 function conversionFinished(worker)
     worker.state = CONVERTED
+    renderGrid.converted = renderGrid.converted + 1
     worker.loyalty = 100
     worker.conversionBar = nil
     worker.tween = nil
@@ -445,7 +473,8 @@ function newGrid(level)
     g.x = level.x
     g.y = level.y
     g.tileSize = level.tileSize
-    g.data = loadGrid(level.grid, level.x, level.y, level.tileSize)
+    g.converted = 0
+    g.data, g.workerCount = loadGrid(level.grid, level.x, level.y, level.tileSize)
     g.width = #g.data
     g.height = #g.data[1]
     local sup = LEVELS[currentLevel].supervisor
@@ -456,6 +485,7 @@ end
 
 function loadGrid(level, x, y, tileSize)
     parsedGrid = {}
+    workerCount = 0
     for i=1, table.getn(level) do
         for j=1, table.getn(level[i]) do
             column = parsedGrid[j]
@@ -470,12 +500,14 @@ function loadGrid(level, x, y, tileSize)
             tileY = y + (tileSize * (i - 1))
             item.pos = {x = tileX, y = tileY}
             if item.type == PLAYER then
-                playerTile = item
+                playerTile = item 
+            elseif item.type == WORKER then
+                workerCount = workerCount + 1
             end
             table.insert(column, item)
         end
     end
-    return parsedGrid
+    return parsedGrid, workerCount
 end
 
 function grid:draw()
@@ -569,8 +601,6 @@ function drawPlayer(item)
         else 
             playerAnim:setSequence(1, 1)
         end
-    elseif item.state == MOVING then
-        
     else
         playerAnim:setSequence(1, 2)
     end
@@ -591,6 +621,25 @@ function drawSpace(item)
     end
 end
 
+function drawStatus()
+    status = string.format("Converted: %d/%d", renderGrid.converted, renderGrid.workerCount)
+    love.graphics.print(string.format("Level %s", currentLevel), 10, 10)
+    love.graphics.print(status, 10, 25)
+end
+
+function drawRetry()
+    love.graphics.print('You were taken out back and beaten!', 250, 550)
+    love.graphics.print('Press space/X to retry', 275, 575)
+end
+
+function drawNewLevel()
+    love.graphics.print('Press space/X to move on to the next level', 275, 575)
+end
+
+function drawFinished()
+    love.graphics.print("That's all folks, thanks for playing.", 275, 575)
+end
+
 function swapPositions(worker)
     playerTile.state = MOVING
     worker.state = MOVING
@@ -606,7 +655,6 @@ function swapFinished(worker)
     renderGrid:swap(playerTile, worker)
     playerTile.state = NONE
     worker.state = CONVERTED
-
     movingWorkerAnim:setSequence(4, 5)
     playerAnim:setSequence(4, 5)
 end
@@ -621,6 +669,28 @@ end
 -- ********* LEVEL LAYOUTS *********
 
 LEVELS = {
+    {
+        tileSize = 64, x = 200, y = 100,
+        supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
+        grid={
+            {EMPTY, EMPTY, EMPTY, EMPTY},
+            {EMPTY, PLAYER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, EMPTY},
+            {EMPTY, EMPTY, EMPTY, EMPTY}
+        }
+    },
+    {
+        tileSize = 64, x = 200, y = 100,
+        supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
+        grid={
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, BLOCK},
+            {EMPTY, PLAYER, WORKER, WORKER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
+            {EMPTY, WORKER, WORKER, WORKER, WORKER, EMPTY},
+            {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}
+        }
+    },
     {
         tileSize = 64, x = 200, y = 100,
         supervisor = { tileX = 1, tileY = 1, direction = { x = 1, y = 0} },
