@@ -273,6 +273,7 @@ end
 
 function loyaltyDry(item, worker)
     item.state = NONE
+    renderGrid.converted = renderGrid.converted - 1
     worker.loyaltyTween = nil
 end
 
