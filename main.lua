@@ -71,6 +71,7 @@ function love.load()
 end
 
 function loadLevel()
+    tween.stopAll()
     state = PLAY
     playerTarget = NONE
     renderGrid = newGrid(LEVELS[currentLevel])
@@ -100,7 +101,7 @@ end
 function love.draw()
     if state == MENU then
         love.graphics.draw(menu, 0, 0)
-    elseif state == PLAY or state == STUNG or state == WINNER then
+    elseif state == PLAY or state == STUNG or state == WINNER or state == FINISHED then
         love.graphics.setPixelEffect(fx.fov)
         love.graphics.draw(bg, 0, 0)
         love.graphics.setPixelEffect()
@@ -108,12 +109,12 @@ function love.draw()
             drawRetry()
         elseif state == WINNER then
             drawNewLevel()
+        elseif state == FINISHED then
+            drawFinished()
         end
         renderGrid:draw()
         drawSupervisor(renderGrid.supervisor.pos.x, renderGrid.supervisor.pos.y)
         drawStatus()
-    elseif state == FINISHED then
-        drawFinished()
     end
 end
 
@@ -315,15 +316,15 @@ end
 
 
 function positionSupervisor()
-    sup = renderGrid.supervisor
-    tile = renderGrid.data[sup.localX][sup.localY]
+    local sup = renderGrid.supervisor
+    local tile = renderGrid.data[sup.localX][sup.localY]
     sup.pos = { x = tile.pos.x, y = tile.pos.y}
     sup.state = WALKING
 end
 
 function moveSupervisor()
-    sup = renderGrid.supervisor
-    nextTile, newDirection = getNextTile()
+    local sup = renderGrid.supervisor
+    local nextTile, newDirection = getNextTile()
     if nextTile ~= nil and sup.state == WALKING then
         if newDirection ~= nil then
             sup.turnSpeed = getTurnSpeed(sup.normal, newDirection)
@@ -485,8 +486,8 @@ function newGrid(level)
 end
 
 function loadGrid(level, x, y, tileSize)
-    parsedGrid = {}
-    workerCount = 0
+    local parsedGrid = {}
+    local workerCount = 0
     for i=1, table.getn(level) do
         for j=1, table.getn(level[i]) do
             column = parsedGrid[j]
@@ -523,8 +524,8 @@ end
 function grid:swap(item1, item2)
     self.data[item1.localX][item1.localY] = item2
     self.data[item2.localX][item2.localY] = item1
-    tmpLocalX = item1.localX
-    tmpLocalY = item1.localY
+    local tmpLocalX = item1.localX
+    local tmpLocalY = item1.localY
     item1.localX = item2.localX
     item1.localY = item2.localY
     item2.localX = tmpLocalX
